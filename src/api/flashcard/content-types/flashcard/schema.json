@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "flashcards",
+  "info": {
+    "singularName": "flashcard",
+    "pluralName": "flashcards",
+    "displayName": "Flashcard"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "keyword": {
+      "type": "string",
+      "required": true
+    },
+    "answer": {
+      "type": "text",
+      "required": true
+    },
+    "explanation": {
+      "type": "text"
+    },
+    "studySession": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::study-session.study-session"
+    },
+    "sourcePage": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::source-page.source-page"
+    },
+    "order": {
+      "type": "integer"
+    },
+    "cardDifficulty": {
+      "type": "enumeration",
+      "enum": [
+        "easy",
+        "medium",
+        "hard"
+      ]
+    }
+  }
+}

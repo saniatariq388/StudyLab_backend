@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "source_pages",
+  "info": {
+    "singularName": "source-page",
+    "pluralName": "source-pages",
+    "displayName": "SourcePage"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images"
+      ]
+    },
+    "extractedText": {
+      "type": "text"
+    },
+    "studySession": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::study-session.study-session"
+    },
+    "pageNumber": {
+      "type": "integer"
+    }
+  }
+}

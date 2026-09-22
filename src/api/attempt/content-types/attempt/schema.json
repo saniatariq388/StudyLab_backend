@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "attempts",
+  "info": {
+    "singularName": "attempt",
+    "pluralName": "attempts",
+    "displayName": "Attempt"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "attempts"
+    },
+    "session": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::study-session.study-session"
+    },
+    "flashcard": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::flashcard.flashcard"
+    },
+    "userAnswer": {
+      "type": "text"
+    },
+    "isCorrect": {
+      "type": "boolean"
+    },
+    "attemptNumber": {
+      "type": "integer"
+    },
+    "answeredAt": {
+      "type": "datetime"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "study_folders",
+  "info": {
+    "singularName": "study-folder",
+    "pluralName": "study-folders",
+    "displayName": "StudyFolder"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "study_folders"
+    },
+    "parentFolder": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::study-folder.study-folder"
+    }
+  }
+}
