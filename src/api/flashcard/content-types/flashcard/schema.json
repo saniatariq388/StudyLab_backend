@@ -24,12 +24,12 @@
     },
     "studySession": {
       "type": "relation",
-      "relation": "oneToOne",
+      "relation": "manyToOne",
       "target": "api::study-session.study-session"
     },
     "sourcePage": {
       "type": "relation",
-      "relation": "oneToOne",
+      "relation": "manyToOne",
       "target": "api::source-page.source-page"
     },
     "order": {
@@ -42,6 +42,11 @@
         "medium",
         "hard"
       ]
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     }
   }
 }

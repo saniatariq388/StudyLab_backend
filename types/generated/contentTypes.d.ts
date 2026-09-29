@@ -550,16 +550,20 @@ export interface ApiFlashcardFlashcard extends Struct.CollectionTypeSchema {
     order: Schema.Attribute.Integer;
     publishedAt: Schema.Attribute.DateTime;
     sourcePage: Schema.Attribute.Relation<
-      'oneToOne',
+      'manyToOne',
       'api::source-page.source-page'
     >;
     studySession: Schema.Attribute.Relation<
-      'oneToOne',
+      'manyToOne',
       'api::study-session.study-session'
     >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
   };
 }
 
@@ -578,7 +582,7 @@ export interface ApiSourcePageSourcePage extends Struct.CollectionTypeSchema {
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     extractedText: Schema.Attribute.Text;
-    image: Schema.Attribute.Media<'images'>;
+    image: Schema.Attribute.Media<'images', true>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -588,12 +592,16 @@ export interface ApiSourcePageSourcePage extends Struct.CollectionTypeSchema {
     pageNumber: Schema.Attribute.Integer;
     publishedAt: Schema.Attribute.DateTime;
     studySession: Schema.Attribute.Relation<
-      'oneToOne',
+      'manyToOne',
       'api::study-session.study-session'
     >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
   };
 }
 

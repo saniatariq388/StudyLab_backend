@@ -13,7 +13,7 @@
   "attributes": {
     "image": {
       "type": "media",
-      "multiple": false,
+      "multiple": true,
       "allowedTypes": [
         "images"
       ]
@@ -23,11 +23,16 @@
     },
     "studySession": {
       "type": "relation",
-      "relation": "oneToOne",
+      "relation": "manyToOne",
       "target": "api::study-session.study-session"
     },
     "pageNumber": {
       "type": "integer"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user"
     }
   }
 }
