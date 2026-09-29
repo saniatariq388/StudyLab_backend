@@ -2,6 +2,47 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
+// FIX: naya helper function add kiya. Gemini kabhi kabhi 503
+// ("model is currently experiencing high demand") deta hai, jo
+// temporary hota hai. Yeh function 3 baar tak retry karega, har
+// attempt ke darmiyan thoda zyada wait karte hue (1.5s, 3s, 4.5s),
+// taake user ko manually "Try Again" na dabana pade aur zyada tar
+// temporary overload khud hi resolve ho jaye.
+async function generateContentWithRetry(
+  model: ReturnType<typeof genAI.getGenerativeModel>,
+  prompt: string,
+  maxRetries = 3
+) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await model.generateContent(prompt);
+    } catch (err: any) {
+      // Gemini SDK ka error kabhi err.status mein 503 deta hai,
+      // kabhi sirf message string mein — dono cases handle kar rahe hain
+      const is503 =
+        err?.status === 503 ||
+        String(err?.message || "").includes("503") ||
+        String(err?.message || "").toLowerCase().includes("overloaded") ||
+        String(err?.message || "").toLowerCase().includes("high demand");
+
+      const isLastAttempt = attempt === maxRetries;
+
+      if (is503 && !isLastAttempt) {
+        strapi.log.warn(
+          `Gemini overloaded (attempt ${attempt}/${maxRetries}), retrying in ${attempt * 1500}ms...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, attempt * 1500));
+        continue;
+      }
+
+      // Agar 503 nahi hai, ya retries khatam ho gaye, to error aage throw karo
+      throw err;
+    }
+  }
+  // TypeScript ke liye — yahan tak code kabhi nahi pohanchega
+  throw new Error("Failed to generate content after retries.");
+}
+
 export default {
   async generate(ctx: any) {
     const user = ctx.state.user;
@@ -57,7 +98,11 @@ Generate between 3 and 15 cards depending on how much genuinely important conten
 
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
-      const result = await model.generateContent(prompt);
+
+      // FIX: pehle `await model.generateContent(prompt)` seedha call hota tha.
+      // Ab retry-wrapper use kar rahe hain taake temporary 503 overload par
+      // khud-b-khud dobara try ho.
+      const result = await generateContentWithRetry(model, prompt);
       const rawText = result.response.text();
 
       // Strip potential markdown code fences just in case
@@ -115,6 +160,22 @@ Generate between 3 and 15 cards depending on how much genuinely important conten
       });
     } catch (error: any) {
       strapi.log.error("AI flashcard generation error:", error);
+
+      // FIX: agar retries ke bawajood bhi 503/overload error rahe, to
+      // user ko generic "Failed to generate flashcards" ki jagah
+      // specific message do, taake frontend usay pehchan sake aur
+      // "AI busy hai, thodi der baad try karein" dikha sake.
+      const isOverloaded =
+        error?.status === 503 ||
+        String(error?.message || "").toLowerCase().includes("high demand") ||
+        String(error?.message || "").toLowerCase().includes("overloaded");
+
+      if (isOverloaded) {
+        return ctx.internalServerError(
+          "The AI model is currently busy. Please try again in a moment."
+        );
+      }
+
       ctx.internalServerError("Failed to generate flashcards");
     }
   },
