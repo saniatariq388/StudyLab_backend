@@ -2,20 +2,14 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY as string);
 
-// FIX: naya helper function add kiya. Gemini kabhi kabhi 503
-// ("model is currently experiencing high demand") deta hai, jo
-// temporary hota hai. Yeh function 3 baar tak retry karega, har
-// attempt ke darmiyan thoda zyada wait karte hue (1.5s, 3s, 4.5s),
-// taake user ko manually "Try Again" na dabana pade aur zyada tar
-// temporary overload khud hi resolve ho jaye.
 async function generateContentWithRetry(
   model: ReturnType<typeof genAI.getGenerativeModel>,
-  prompt: string,
+  parts: any[],
   maxRetries = 3
 ) {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      return await model.generateContent(prompt);
+      return await model.generateContent(parts);
     } catch (err: any) {
       const is503 =
         err?.status === 503 ||
@@ -34,6 +28,36 @@ async function generateContentWithRetry(
   throw new Error("Failed to generate content after retries.");
 }
 
+// FIX: naya helper — Strapi media library se image fetch karke
+// base64 mein convert karta hai, taake Gemini Vision ko bheja ja sake.
+// Sirf mobile flow use karega jab extractedText nahi diya gaya ho.
+async function imageIdsToGeminiParts(imageIds: number[]) {
+  const parts = [];
+
+  for (const id of imageIds) {
+    const file = await strapi.entityService.findOne("plugin::upload.file", id);
+    if (!file || !file.url) continue;
+
+    // file.url relative ho sakta hai (jaise "/uploads/xyz.jpg") ya absolute
+    const fileUrl = file.url.startsWith("http")
+      ? file.url
+      : `${strapi.config.get("server.url")}${file.url}`;
+
+    const response = await fetch(fileUrl);
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = Buffer.from(arrayBuffer).toString("base64");
+
+    parts.push({
+      inlineData: {
+        mimeType: file.mime || "image/jpeg",
+        data: base64,
+      },
+    });
+  }
+
+  return parts;
+}
+
 export default {
   async generate(ctx: any) {
     const user = ctx.state.user;
@@ -42,12 +66,13 @@ export default {
       return ctx.unauthorized("You must be logged in.");
     }
 
-    // FIX: imageIds bhi request body se le rahe hain (frontend se
-    // uploadImages() ke baad mile hue Strapi media IDs)
+    // FIX: extractedText ab optional hai — web isay bhejta hai (client-side
+    // OCR ho chuka hota hai), mobile nahi bhejega (seedha images Gemini
+    // Vision ko dega, jo khud text nikalega aur flashcards banayega)
     const { extractedText, studySessionId, density, imageIds } = ctx.request.body;
 
-    if (!extractedText || !extractedText.trim()) {
-      return ctx.badRequest("extractedText is required");
+    if (!extractedText?.trim() && (!imageIds || imageIds.length === 0)) {
+      return ctx.badRequest("Either extractedText or imageIds is required");
     }
 
     if (!studySessionId) {
@@ -72,15 +97,21 @@ export default {
         ? "Extract detailed, comprehensive cards including mechanisms, cascades, and nuanced explanations."
         : "Extract only high-yield core concepts: key terms, definitions, and essential facts. Avoid redundant or filler cards.";
 
-    const prompt = `You are an expert study-material summarizer. Read the following text extracted from a book page or lecture notes, and generate flashcards from it.
+    // FIX: prompt ab dono cases handle karta hai — agar text diya gaya hai
+    // to wahi use karo, warna Gemini ko batao ke woh khud images se text
+    // padhe (OCR + extraction ek hi step mein, Vision capability se)
+    const promptIntro = extractedText?.trim()
+      ? `Read the following text extracted from a book page or lecture notes, and generate flashcards from it.`
+      : `Read the attached image(s) of book pages or lecture notes (perform OCR yourself), and generate flashcards from the content.`;
+
+    const promptBody = extractedText?.trim()
+      ? `\nText:\n"""\n${extractedText}\n"""\n`
+      : "";
+
+    const prompt = `You are an expert study-material summarizer. ${promptIntro}
 
 ${densityInstruction}
-
-Text:
-"""
-${extractedText}
-"""
-
+${promptBody}
 Respond with ONLY a valid JSON array (no markdown, no extra text, no code fences), where each item has this exact shape:
 [
   { "keyword": "short term or concept", "answer": "concise correct answer", "explanation": "optional 1-2 sentence extra context" }
@@ -90,7 +121,18 @@ Generate between 3 and 15 cards depending on how much genuinely important conten
 
     try {
       const model = genAI.getGenerativeModel({ model: "gemini-3.6-flash" });
-      const result = await generateContentWithRetry(model, prompt);
+
+      // FIX: agar text nahi hai (mobile flow), to images ko Gemini Vision
+      // parts mein convert karke prompt ke saath bhejo
+      let contentParts: any[] = [prompt];
+      let finalExtractedText = extractedText || "";
+
+      if (!extractedText?.trim() && imageIds && imageIds.length > 0) {
+        const imageParts = await imageIdsToGeminiParts(imageIds);
+        contentParts = [prompt, ...imageParts];
+      }
+
+      const result = await generateContentWithRetry(model, contentParts);
       const rawText = result.response.text();
       const cleaned = rawText.replace(/```json|```/g, "").trim();
 
@@ -106,12 +148,14 @@ Generate between 3 and 15 cards depending on how much genuinely important conten
         return ctx.internalServerError("AI did not generate any flashcards.");
       }
 
+      // FIX: agar mobile flow tha (extractedText nahi tha), sourcePage mein
+      // ek placeholder note save karo taake field khali na rahe
       const sourcePage = await strapi.documents("api::source-page.source-page").create({
         data: {
-          extractedText,
+          extractedText: finalExtractedText || "(extracted via AI Vision from uploaded image)",
           studySession: studySessionId,
-          user: user.id, // FIX: user relation set kar rahe hain
-          ...(imageIds && imageIds.length > 0 ? { image: imageIds } : {}), // FIX: uploaded images link kar rahe hain
+          user: user.id,
+          ...(imageIds && imageIds.length > 0 ? { image: imageIds } : {}),
         },
       });
 
@@ -126,7 +170,7 @@ Generate between 3 and 15 cards depending on how much genuinely important conten
             order: i + 1,
             studySession: studySessionId,
             sourcePage: sourcePage.documentId,
-            user: user.id, // FIX: yahan bhi user relation set kar rahe hain
+            user: user.id,
           },
         });
         createdCards.push(created);
